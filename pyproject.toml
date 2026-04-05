@@ -1,12 +1,12 @@
 [project]
-name = "opencomposor-ai"
+name = "opencomposer-ai"
 version = "0.1.4.post6"
 description = "A lightweight personal AI assistant framework"
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
-    {name = "opencomposor contributors"}
+    {name = "opencomposer contributors"}
 ]
 keywords = ["ai", "agent", "chatbot"]
 classifiers = [
@@ -84,7 +84,7 @@ dev = [
 ]
 
 [project.scripts]
-opencomposor = "opencomposor.cli.commands:app"
+opencomposer = "opencomposer.cli.commands:app"
 
 [build-system]
 requires = ["hatchling"]
@@ -95,24 +95,24 @@ allow-direct-references = true
 
 [tool.hatch.build]
 include = [
-    "opencomposor/**/*.py",
-    "opencomposor/templates/**/*.md",
-    "opencomposor/skills/**/*.md",
-    "opencomposor/skills/**/*.sh",
+    "opencomposer/**/*.py",
+    "opencomposer/templates/**/*.md",
+    "opencomposer/skills/**/*.md",
+    "opencomposer/skills/**/*.sh",
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["opencomposor"]
+packages = ["opencomposer"]
 
 [tool.hatch.build.targets.wheel.sources]
-"opencomposor" = "opencomposor"
+"opencomposer" = "opencomposer"
 
 [tool.hatch.build.targets.wheel.force-include]
-"bridge" = "opencomposor/bridge"
+"bridge" = "opencomposer/bridge"
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "opencomposor/",
+    "opencomposer/",
     "bridge/",
     "README.md",
     "LICENSE",
@@ -131,7 +131,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.coverage.run]
-source = ["opencomposor"]
+source = ["opencomposer"]
 omit = ["tests/*", "**/tests/*"]
 
 [tool.coverage.report]

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * opencomposor WhatsApp Bridge
+ * opencomposer WhatsApp Bridge
  * 
- * This bridge connects WhatsApp Web to opencomposor's Python backend
+ * This bridge connects WhatsApp Web to opencomposer's Python backend
  * via WebSocket. It handles authentication, message forwarding,
  * and reconnection logic.
  * 
@@ -10,7 +10,7 @@
  *   npm run build && npm start
  *   
  * Or with custom settings:
- *   BRIDGE_PORT=3001 AUTH_DIR=~/.opencomposor/whatsapp npm start
+ *   BRIDGE_PORT=3001 AUTH_DIR=~/.opencomposer/whatsapp npm start
  */
 
 // Polyfill crypto for Baileys in ESM
@@ -24,15 +24,15 @@ import { homedir } from 'os';
 import { join } from 'path';
 
 const PORT = parseInt(process.env.BRIDGE_PORT || '3001', 10);
-const AUTH_DIR = process.env.AUTH_DIR || join(homedir(), '.opencomposor', 'whatsapp-auth');
+const AUTH_DIR = process.env.AUTH_DIR || join(homedir(), '.opencomposer', 'whatsapp-auth');
 const TOKEN = process.env.BRIDGE_TOKEN?.trim();
 
 if (!TOKEN) {
-  console.error('BRIDGE_TOKEN is required. Start the bridge via opencomposor so it can provision a local secret automatically.');
+  console.error('BRIDGE_TOKEN is required. Start the bridge via opencomposer so it can provision a local secret automatically.');
   process.exit(1);
 }
 
-console.log('🐈 opencomposor WhatsApp Bridge');
+console.log('🐈 opencomposer WhatsApp Bridge');
 console.log('========================\n');
 
 const server = new BridgeServer(PORT, AUTH_DIR, TOKEN);

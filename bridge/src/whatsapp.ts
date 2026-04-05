@@ -90,7 +90,7 @@ export class WhatsAppClient {
       version,
       logger,
       printQRInTerminal: false,
-      browser: ['opencomposor', 'cli', VERSION],
+      browser: ['opencomposer', 'cli', VERSION],
       syncFullHistory: false,
       markOnlineOnConnect: false,
     });

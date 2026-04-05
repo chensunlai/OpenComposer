@@ -1,4 +1,4 @@
-# Embodied Multi-Robot Agent Framework
+# OpenComposer
 
 An embodied multi-robot intelligence framework for general environments.
 
