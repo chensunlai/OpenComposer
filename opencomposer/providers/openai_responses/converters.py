@@ -49,8 +49,8 @@ def convert_messages(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str
 
         if role == "tool":
             call_id, _ = split_tool_call_id(msg.get("tool_call_id"))
-            output_text = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
-            input_items.append({"type": "function_call_output", "call_id": call_id, "output": output_text})
+            output = convert_tool_output(content)
+            input_items.append({"type": "function_call_output", "call_id": call_id, "output": output})
 
     return system_prompt, input_items
 
@@ -77,6 +77,26 @@ def convert_user_message(content: Any) -> dict[str, Any]:
         if converted:
             return {"role": "user", "content": converted}
     return {"role": "user", "content": [{"type": "input_text", "text": ""}]}
+
+
+def convert_tool_output(content: Any) -> str | list[dict[str, Any]]:
+    """Convert tool output to Responses API function_call_output format."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        converted: list[dict[str, Any]] = []
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") == "text":
+                converted.append({"type": "input_text", "text": item.get("text", "")})
+            elif item.get("type") == "image_url":
+                url = (item.get("image_url") or {}).get("url")
+                if url:
+                    converted.append({"type": "input_image", "image_url": url, "detail": "auto"})
+        if converted:
+            return converted
+    return json.dumps(content, ensure_ascii=False)
 
 
 def convert_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:

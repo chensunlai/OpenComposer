@@ -34,7 +34,7 @@ class ProviderSpec:
     display_name: str = ""  # shown in `opencomposer status`
 
     # which provider implementation to use
-    # "openai_compat" | "anthropic" | "azure_openai" | "openai_codex" | "github_copilot"
+    # "openai_compat" | "openai_responses" | "anthropic" | "azure_openai" | "openai_codex" | "github_copilot"
     backend: str = "openai_compat"
 
     # extra env vars, e.g. (("ZHIPUAI_API_KEY", "{api_key}"),)
@@ -201,6 +201,14 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         display_name="OpenAI",
         backend="openai_compat",
         supports_max_completion_tokens=True,
+    ),
+    ProviderSpec(
+        name="openai_responses",
+        keywords=("openai-responses",),
+        env_key="OPENAI_API_KEY",
+        display_name="OpenAI Responses",
+        backend="openai_responses",
+        default_api_base="https://api.openai.com/v1",
     ),
     # OpenAI Codex: OAuth-based, dedicated provider
     ProviderSpec(

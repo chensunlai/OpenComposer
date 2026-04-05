@@ -402,6 +402,11 @@ def _make_provider(config: Config):
             console.print("Set them in ~/.composer/config.json under providers.azure_openai section")
             console.print("Use the model field to specify the deployment name.")
             raise typer.Exit(1)
+    elif backend == "openai_responses":
+        if not p or not p.api_key:
+            console.print("[red]Error: OpenAI Responses requires api_key.[/red]")
+            console.print("Set it in ~/.composer/config.json under providers.openai_responses section")
+            raise typer.Exit(1)
     elif backend == "openai_compat" and not model.startswith("bedrock/"):
         needs_key = not (p and p.api_key)
         exempt = spec and (spec.is_oauth or spec.is_local or spec.is_direct)
@@ -414,6 +419,14 @@ def _make_provider(config: Config):
     if backend == "openai_codex":
         from opencomposer.providers.openai_codex_provider import OpenAICodexProvider
         provider = OpenAICodexProvider(default_model=model)
+    elif backend == "openai_responses":
+        from opencomposer.providers.openai_responses_provider import OpenAIResponsesProvider
+        provider = OpenAIResponsesProvider(
+            api_key=p.api_key if p else None,
+            api_base=config.get_api_base(model),
+            default_model=model,
+            extra_headers=p.extra_headers if p else None,
+        )
     elif backend == "azure_openai":
         from opencomposer.providers.azure_openai_provider import AzureOpenAIProvider
         provider = AzureOpenAIProvider(

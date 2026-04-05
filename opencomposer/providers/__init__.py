@@ -12,6 +12,7 @@ __all__ = [
     "LLMResponse",
     "AnthropicProvider",
     "OpenAICompatProvider",
+    "OpenAIResponsesProvider",
     "OpenAICodexProvider",
     "GitHubCopilotProvider",
     "AzureOpenAIProvider",
@@ -20,6 +21,7 @@ __all__ = [
 _LAZY_IMPORTS = {
     "AnthropicProvider": ".anthropic_provider",
     "OpenAICompatProvider": ".openai_compat_provider",
+    "OpenAIResponsesProvider": ".openai_responses_provider",
     "OpenAICodexProvider": ".openai_codex_provider",
     "GitHubCopilotProvider": ".github_copilot_provider",
     "AzureOpenAIProvider": ".azure_openai_provider",
@@ -30,6 +32,7 @@ if TYPE_CHECKING:
     from opencomposer.providers.azure_openai_provider import AzureOpenAIProvider
     from opencomposer.providers.github_copilot_provider import GitHubCopilotProvider
     from opencomposer.providers.openai_compat_provider import OpenAICompatProvider
+    from opencomposer.providers.openai_responses_provider import OpenAIResponsesProvider
     from opencomposer.providers.openai_codex_provider import OpenAICodexProvider
 
 
