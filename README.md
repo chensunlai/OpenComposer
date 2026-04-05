@@ -18,7 +18,7 @@ The core direction is:
 
 ## What Makes It Different
 
-Compared with the current `opencomposor` baseline, this project focuses on embodied execution speed, spatial understanding, and robot task continuity.
+Compared with the current `nanobot` baseline, this project focuses on embodied execution speed, spatial understanding, and robot task continuity.
 
 Key characteristics:
 
@@ -183,4 +183,4 @@ The long-term goal is a dedicated memory and optimization pipeline for skills:
 
 ## Status
 
-This repository is under active development. The current codebase still contains inherited `opencomposor` structure, but the long-term goal is to evolve it into a general embodied multi-robot collaboration framework for real-world environments.
+This repository is under active development. The current codebase still contains inherited `nanobot` structure, but the long-term goal is to evolve it into a general embodied multi-robot collaboration framework for real-world environments.
