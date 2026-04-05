@@ -2,7 +2,7 @@
 
 An embodied multi-robot intelligence framework for general environments.
 
-This project is forked from `nanobot` and is being extended from a lightweight general-purpose agent into a robotics-oriented embodied agent framework deeply integrated with ROS.
+This project is forked from [`nanobot`](https://github.com/HKUDS/nanobot) and is being extended from a lightweight general-purpose agent into a robotics-oriented embodied agent framework deeply integrated with ROS.
 
 ## Vision
 
