@@ -22,11 +22,11 @@ def _make_console() -> Console:
 
 
 class ThinkingSpinner:
-    """Spinner that shows 'opencomposer is thinking...' with pause support."""
+    """Spinner that shows 'composer is thinking...' with pause support."""
 
     def __init__(self, console: Console | None = None):
         c = console or _make_console()
-        self._spinner = c.status("[dim]opencomposer is thinking...[/dim]", spinner="dots")
+        self._spinner = c.status("[dim]composer is thinking...[/dim]", spinner="dots")
         self._active = False
 
     def __enter__(self):
@@ -98,7 +98,7 @@ class StreamRenderer:
             self._stop_spinner()
             c = _make_console()
             c.print()
-            c.print(f"[cyan]{__logo__} opencomposer[/cyan]")
+            c.print(f"[cyan]{__logo__} composer[/cyan]")
             self._live = Live(self._render(), console=c, auto_refresh=False)
             self._live.start()
         now = time.monotonic()

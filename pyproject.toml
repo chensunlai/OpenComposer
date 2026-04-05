@@ -84,7 +84,7 @@ dev = [
 ]
 
 [project.scripts]
-opencomposer = "opencomposer.cli.commands:app"
+composer = "opencomposer.cli.commands:app"
 
 [build-system]
 requires = ["hatchling"]

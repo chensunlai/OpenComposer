@@ -27,21 +27,21 @@ npx --yes clawhub@latest search "web scraping" --limit 5
 ## Install
 
 ```bash
-npx --yes clawhub@latest install <slug> --workdir ~/.opencomposer/workspace
+npx --yes clawhub@latest install <slug> --workdir ~/.composer/workspace
 ```
 
-Replace `<slug>` with the skill name from search results. This places the skill into `~/.opencomposer/workspace/skills/`, where opencomposer loads workspace skills from. Always include `--workdir`.
+Replace `<slug>` with the skill name from search results. This places the skill into `~/.composer/workspace/skills/`, where opencomposer loads workspace skills from. Always include `--workdir`.
 
 ## Update
 
 ```bash
-npx --yes clawhub@latest update --all --workdir ~/.opencomposer/workspace
+npx --yes clawhub@latest update --all --workdir ~/.composer/workspace
 ```
 
 ## List installed
 
 ```bash
-npx --yes clawhub@latest list --workdir ~/.opencomposer/workspace
+npx --yes clawhub@latest list --workdir ~/.composer/workspace
 ```
 
 ## Notes
@@ -49,5 +49,5 @@ npx --yes clawhub@latest list --workdir ~/.opencomposer/workspace
 - Requires Node.js (`npx` comes with it).
 - No API key needed for search and install.
 - Login (`npx --yes clawhub@latest login`) is only required for publishing.
-- `--workdir ~/.opencomposer/workspace` is critical — without it, skills install to the current directory instead of the opencomposer workspace.
+- `--workdir ~/.composer/workspace` is critical — without it, skills install to the current directory instead of the opencomposer workspace.
 - After install, remind the user to start a new session to load the skill.

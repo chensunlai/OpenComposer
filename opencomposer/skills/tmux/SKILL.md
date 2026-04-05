@@ -11,10 +11,10 @@ Use tmux only when you need an interactive TTY. Prefer exec background mode for 
 ## Quickstart (isolated socket, exec tool)
 
 ```bash
-SOCKET_DIR="${OPENCOMPOSER_TMUX_SOCKET_DIR:-${TMPDIR:-/tmp}/opencomposer-tmux-sockets}"
+SOCKET_DIR="${OPENCOMPOSER_TMUX_SOCKET_DIR:-${TMPDIR:-/tmp}/composer-tmux-sockets}"
 mkdir -p "$SOCKET_DIR"
-SOCKET="$SOCKET_DIR/opencomposer.sock"
-SESSION=opencomposer-python
+SOCKET="$SOCKET_DIR/composer.sock"
+SESSION=composer-python
 
 tmux -S "$SOCKET" new -d -s "$SESSION" -n shell
 tmux -S "$SOCKET" send-keys -t "$SESSION":0.0 -- 'PYTHON_BASIC_REPL=1 python3 -q' Enter
@@ -32,7 +32,7 @@ To monitor:
 ## Socket convention
 
 - Use `OPENCOMPOSER_TMUX_SOCKET_DIR` environment variable.
-- Default socket path: `"$OPENCOMPOSER_TMUX_SOCKET_DIR/opencomposer.sock"`.
+- Default socket path: `"$OPENCOMPOSER_TMUX_SOCKET_DIR/composer.sock"`.
 
 ## Targeting panes and naming
 

@@ -285,7 +285,7 @@ async def cmd_help(ctx: CommandContext) -> OutboundMessage:
 def build_help_text() -> str:
     """Build canonical help text shared across channels."""
     lines = [
-        "🐈 opencomposer commands:",
+        "🐈 composer commands:",
         "/new — Start a new conversation",
         "/stop — Stop the current task",
         "/restart — Restart the bot",

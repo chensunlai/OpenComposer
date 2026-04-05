@@ -44,7 +44,7 @@ class Opencomposer:
 
         Args:
             config_path: Path to ``config.json``.  Defaults to
-                ``~/.opencomposer/config.json``.
+                ``~/.composer/config.json``.
             workspace: Override the workspace directory from config.
         """
         from opencomposer.config.loader import load_config

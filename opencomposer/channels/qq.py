@@ -181,9 +181,9 @@ class QQChannel(BaseChannel):
             try:
                 root = Path(get_media_dir("qq"))
             except Exception:
-                root = Path.home() / ".opencomposer" / "media" / "qq"
+                root = Path.home() / ".composer" / "media" / "qq"
         else:
-            root = Path.home() / ".opencomposer" / "media" / "qq"
+            root = Path.home() / ".composer" / "media" / "qq"
 
         root.mkdir(parents=True, exist_ok=True)
         logger.info("QQ media directory: {}", str(root))

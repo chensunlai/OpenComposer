@@ -10,7 +10,7 @@
  *   npm run build && npm start
  *   
  * Or with custom settings:
- *   BRIDGE_PORT=3001 AUTH_DIR=~/.opencomposer/whatsapp npm start
+ *   BRIDGE_PORT=3001 AUTH_DIR=~/.composer/whatsapp npm start
  */
 
 // Polyfill crypto for Baileys in ESM
@@ -24,7 +24,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 
 const PORT = parseInt(process.env.BRIDGE_PORT || '3001', 10);
-const AUTH_DIR = process.env.AUTH_DIR || join(homedir(), '.opencomposer', 'whatsapp-auth');
+const AUTH_DIR = process.env.AUTH_DIR || join(homedir(), '.composer', 'whatsapp-auth');
 const TOKEN = process.env.BRIDGE_TOKEN?.trim();
 
 if (!TOKEN) {
