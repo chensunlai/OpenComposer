@@ -24,9 +24,18 @@ async def cmd_stop(ctx: CommandContext) -> OutboundMessage:
             await t
         except (asyncio.CancelledError, Exception):
             pass
+    bound_task_ids = loop.subagents.bound_task_ids_for_session(msg.session_key)
     sub_cancelled = await loop.subagents.cancel_by_session(msg.session_key)
+    task_cancelled = await loop.task_store.transition_task_ids(
+        msg.session_key,
+        bound_task_ids,
+        to_status="cancelled",
+        from_statuses={"in_progress"},
+    )
     total = cancelled + sub_cancelled
     content = f"Stopped {total} task(s)." if total else "No active task to stop."
+    if task_cancelled:
+        content += f" Marked {len(task_cancelled)} task(s) as cancelled."
     return OutboundMessage(
         channel=msg.channel, chat_id=msg.chat_id, content=content,
         metadata=dict(msg.metadata or {})
@@ -78,15 +87,23 @@ async def cmd_new(ctx: CommandContext) -> OutboundMessage:
     """Start a fresh session."""
     loop = ctx.loop
     session = ctx.session or loop.sessions.get_or_create(ctx.key)
+    sub_cancelled = await loop.subagents.cancel_by_session(ctx.key)
     snapshot = session.messages[session.last_consolidated:]
     session.clear()
     loop.sessions.save(session)
     loop.sessions.invalidate(session.key)
+    cleared_tasks = await loop.task_store.clear_session(ctx.key)
     if snapshot:
         loop._schedule_background(loop.consolidator.archive(snapshot))
+    extra = []
+    if cleared_tasks:
+        extra.append(f"cleared {cleared_tasks} task(s)")
+    if sub_cancelled:
+        extra.append(f"stopped {sub_cancelled} subagent(s)")
+    suffix = f" ({', '.join(extra)})" if extra else ""
     return OutboundMessage(
         channel=ctx.msg.channel, chat_id=ctx.msg.chat_id,
-        content="New session started.",
+        content=f"New session started.{suffix}",
         metadata=dict(ctx.msg.metadata or {})
     )
 

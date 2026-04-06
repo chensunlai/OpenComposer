@@ -34,6 +34,17 @@ def get_logs_dir() -> Path:
     return get_runtime_subdir("logs")
 
 
+def get_tasks_dir() -> Path:
+    """Return the task storage directory."""
+    return get_runtime_subdir("tasks")
+
+
+def get_workspace_tasks_dir(workspace: str | Path | None = None) -> Path:
+    """Return the workspace-scoped task storage directory."""
+    base = Path(workspace).expanduser() if workspace else get_workspace_path()
+    return ensure_dir(base / "tasks")
+
+
 def get_workspace_path(workspace: str | None = None) -> Path:
     """Resolve and ensure the agent workspace path."""
     path = Path(workspace).expanduser() if workspace else Path.home() / ".composer" / "workspace"
