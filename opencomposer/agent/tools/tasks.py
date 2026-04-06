@@ -52,13 +52,15 @@ class _TaskTool(Tool):
 
 @tool_parameters(
     tool_parameters_schema(
-        subject=StringSchema("A brief title for the task"),
-        description=StringSchema("What needs to be done"),
-        active_form=StringSchema(
-            "Present continuous form shown while the task is in progress",
-            nullable=True,
-        ),
-        metadata=_METADATA_SCHEMA,
+        properties={
+            "subject": StringSchema("A brief title for the task"),
+            "description": StringSchema("What needs to be done"),
+            "active_form": StringSchema(
+                "Present continuous form shown while the task is in progress",
+                nullable=True,
+            ),
+            "metadata": _METADATA_SCHEMA,
+        },
         required=["subject", "description"],
     )
 )
@@ -128,6 +130,8 @@ class TaskGetTool(_TaskTool):
             lines.append(f"Blocks: {', '.join(f'#{item}' for item in task.blocks)}")
         if task.metadata:
             lines.append(f"Metadata: {task.metadata}")
+        if task.result is not None:
+            lines.append("Result: available")
         return "\n".join(lines)
 
 
@@ -173,7 +177,8 @@ class TaskWaitTool(_TaskTool):
                 return "Task not found"
 
             if task.status in self._TERMINAL_STATUSES:
-                return f"Task #{task.id} finished with status: {task.status}"
+                suffix = " Result is available via task_get_result." if task.result is not None else ""
+                return f"Task #{task.id} finished with status: {task.status}.{suffix}"
 
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -183,6 +188,34 @@ class TaskWaitTool(_TaskTool):
                 )
 
             await asyncio.sleep(min(poll_interval, remaining))
+
+
+@tool_parameters(
+    tool_parameters_schema(
+        task_id=StringSchema("The ID of the task whose stored result should be returned"),
+        required=["task_id"],
+    )
+)
+class TaskGetResultTool(_TaskTool):
+    @property
+    def name(self) -> str:
+        return "task_get_result"
+
+    @property
+    def description(self) -> str:
+        return "Retrieve the stored result for a task in the current session."
+
+    @property
+    def read_only(self) -> bool:
+        return True
+
+    async def execute(self, task_id: str, **kwargs: Any) -> str:
+        task = await self._store.get_task(self.session_key, task_id)
+        if task is None:
+            return "Task not found"
+        if task.result is None:
+            return f"Task #{task.id} has no stored result yet. Current status: {task.status}"
+        return f"Task #{task.id} result:\n{task.result}"
 
 
 @tool_parameters(tool_parameters_schema())
@@ -220,24 +253,26 @@ class TaskListTool(_TaskTool):
 
 @tool_parameters(
     tool_parameters_schema(
-        task_id=StringSchema("The ID of the task to update"),
-        subject=StringSchema("New subject for the task", nullable=True),
-        description=StringSchema("New description for the task", nullable=True),
-        active_form=StringSchema(
-            "Present continuous form shown while the task is in progress",
-            nullable=True,
-        ),
-        status=_STATUS_SCHEMA,
-        owner=StringSchema("New owner for the task", nullable=True),
-        add_blocks=ArraySchema(
-            StringSchema("Task ID that this task blocks"),
-            description="Task IDs that this task blocks",
-        ),
-        add_blocked_by=ArraySchema(
-            StringSchema("Task ID that blocks this task"),
-            description="Task IDs that block this task",
-        ),
-        metadata=_METADATA_SCHEMA,
+        properties={
+            "task_id": StringSchema("The ID of the task to update"),
+            "subject": StringSchema("New subject for the task", nullable=True),
+            "description": StringSchema("New description for the task", nullable=True),
+            "active_form": StringSchema(
+                "Present continuous form shown while the task is in progress",
+                nullable=True,
+            ),
+            "status": _STATUS_SCHEMA,
+            "owner": StringSchema("New owner for the task", nullable=True),
+            "add_blocks": ArraySchema(
+                StringSchema("Task ID that this task blocks"),
+                description="Task IDs that this task blocks",
+            ),
+            "add_blocked_by": ArraySchema(
+                StringSchema("Task ID that blocks this task"),
+                description="Task IDs that block this task",
+            ),
+            "metadata": _METADATA_SCHEMA,
+        },
         required=["task_id"],
     )
 )
@@ -402,6 +437,7 @@ def build_task_tools(
         TaskCreateTool(shared, session_key=session_key),
         TaskGetTool(shared, session_key=session_key),
         TaskWaitTool(shared, session_key=session_key),
+        TaskGetResultTool(shared, session_key=session_key),
         TaskUpdateTool(shared, session_key=session_key),
         TaskDeleteTool(shared, session_key=session_key),
         TaskListTool(shared, session_key=session_key),

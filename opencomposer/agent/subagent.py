@@ -10,7 +10,6 @@ from loguru import logger
 
 from opencomposer.agent.hook import AgentHook, AgentHookContext
 from opencomposer.agent.task_store import TaskStore
-from opencomposer.utils.prompt_templates import render_template
 from opencomposer.agent.runner import AgentRunSpec, AgentRunner
 from opencomposer.agent.skills import BUILTIN_SKILLS_DIR
 from opencomposer.agent.tools.filesystem import EditFileTool, ListDirTool, ReadFileTool, WriteFileTool
@@ -24,6 +23,7 @@ from opencomposer.bus.queue import MessageBus
 from opencomposer.config.paths import get_workspace_tasks_dir
 from opencomposer.config.schema import ExecToolConfig, WebToolsConfig
 from opencomposer.providers.base import LLMProvider
+from opencomposer.utils.prompt_templates import render_template
 
 
 class _SubagentHook(AgentHook):
@@ -74,7 +74,7 @@ class SubagentManager:
 
     async def spawn(
         self,
-        task: str,
+        task: str | None = None,
         label: str | None = None,
         task_id: str | None = None,
         origin_channel: str = "cli",
@@ -83,15 +83,23 @@ class SubagentManager:
     ) -> str:
         """Spawn a subagent to execute a task in the background."""
         bound_task_id = task_id.strip() if isinstance(task_id, str) and task_id.strip() else None
+        task_text = task.strip() if isinstance(task, str) and task.strip() else ""
+        display_label = label.strip() if isinstance(label, str) and label.strip() else None
         if bound_task_id is not None:
             if not session_key:
                 return "Error: task_id binding requires a session context"
             bound_task = await self.task_store.get_task(session_key, bound_task_id)
             if bound_task is None:
                 return f"Error: Task #{bound_task_id} not found in the current session"
+            task_text = self._build_bound_task_prompt(bound_task)
+            if display_label is None:
+                display_label = bound_task.subject
+        elif not task_text:
+            return "Error: task is required when task_id is not provided"
 
         subagent_id = str(uuid.uuid4())[:8]
-        display_label = label or task[:30] + ("..." if len(task) > 30 else "")
+        if display_label is None:
+            display_label = task_text[:30] + ("..." if len(task_text) > 30 else "")
         origin = {"channel": origin_channel, "chat_id": origin_chat_id}
         if bound_task_id is not None:
             self._bound_tasks[subagent_id] = bound_task_id
@@ -99,7 +107,7 @@ class SubagentManager:
         bg_task = asyncio.create_task(
             self._run_subagent(
                 subagent_id,
-                task,
+                task_text,
                 display_label,
                 origin,
                 session_key,
@@ -121,7 +129,16 @@ class SubagentManager:
         bg_task.add_done_callback(_cleanup)
 
         logger.info("Spawned subagent [{}]: {}", subagent_id, display_label)
-        return f"Subagent [{display_label}] started (id: {subagent_id}). I'll notify you when it completes."
+        if bound_task_id is not None:
+            return (
+                f"Subagent [{display_label}] started (id: {subagent_id}). "
+                f"Use task_wait(task_id=\"{bound_task_id}\") to wait and "
+                f"task_get_result(task_id=\"{bound_task_id}\") to read the result."
+            )
+        return (
+            f"Subagent [{display_label}] started (id: {subagent_id}). "
+            "It will auto-reply when finished; bind a task_id if you want task-based progress tracking and stored results."
+        )
 
     async def _run_subagent(
         self,
@@ -191,15 +208,21 @@ class SubagentManager:
                     subagent_id=subagent_id,
                     owner=f"subagent:{subagent_id}",
                 )
-                await self._announce_result(
-                    subagent_id,
-                    label,
-                    task,
+                await self._store_bound_task_result(
+                    session_key,
+                    bound_task_id,
                     self._format_partial_progress(result),
-                    origin,
-                    "error",
-                    session_key=session_key,
                 )
+                if bound_task_id is None:
+                    await self._announce_result(
+                        subagent_id,
+                        label,
+                        task,
+                        self._format_partial_progress(result),
+                        origin,
+                        "error",
+                        session_key=session_key,
+                    )
                 return
             if result.stop_reason == "error":
                 await self._sync_bound_task(
@@ -209,15 +232,21 @@ class SubagentManager:
                     subagent_id=subagent_id,
                     owner=f"subagent:{subagent_id}",
                 )
-                await self._announce_result(
-                    subagent_id,
-                    label,
-                    task,
+                await self._store_bound_task_result(
+                    session_key,
+                    bound_task_id,
                     result.error or "Error: subagent execution failed.",
-                    origin,
-                    "error",
-                    session_key=session_key,
                 )
+                if bound_task_id is None:
+                    await self._announce_result(
+                        subagent_id,
+                        label,
+                        task,
+                        result.error or "Error: subagent execution failed.",
+                        origin,
+                        "error",
+                        session_key=session_key,
+                    )
                 return
             final_result = result.final_content or "Task completed but no final response was generated."
 
@@ -229,15 +258,21 @@ class SubagentManager:
                 subagent_id=subagent_id,
                 owner=f"subagent:{subagent_id}",
             )
-            await self._announce_result(
-                subagent_id,
-                label,
-                task,
+            await self._store_bound_task_result(
+                session_key,
+                bound_task_id,
                 final_result,
-                origin,
-                "ok",
-                session_key=session_key,
             )
+            if bound_task_id is None:
+                await self._announce_result(
+                    subagent_id,
+                    label,
+                    task,
+                    final_result,
+                    origin,
+                    "ok",
+                    session_key=session_key,
+                )
 
         except asyncio.CancelledError:
             logger.info("Subagent [{}] cancelled", subagent_id)
@@ -247,6 +282,11 @@ class SubagentManager:
                 status="cancelled",
                 subagent_id=subagent_id,
                 owner=f"subagent:{subagent_id}",
+            )
+            await self._store_bound_task_result(
+                session_key,
+                bound_task_id,
+                "Subagent execution was cancelled before a final result was produced.",
             )
             raise
         except Exception as e:
@@ -259,15 +299,21 @@ class SubagentManager:
                 subagent_id=subagent_id,
                 owner=f"subagent:{subagent_id}",
             )
-            await self._announce_result(
-                subagent_id,
-                label,
-                task,
+            await self._store_bound_task_result(
+                session_key,
+                bound_task_id,
                 error_msg,
-                origin,
-                "error",
-                session_key=session_key,
             )
+            if bound_task_id is None:
+                await self._announce_result(
+                    subagent_id,
+                    label,
+                    task,
+                    error_msg,
+                    origin,
+                    "error",
+                    session_key=session_key,
+                )
 
     async def _announce_result(
         self,
@@ -291,7 +337,6 @@ class SubagentManager:
             result=result,
         )
 
-        # Inject as system message to trigger main agent
         msg = InboundMessage(
             channel="system",
             sender_id="subagent",
@@ -331,6 +376,32 @@ class SubagentManager:
             )
         except ValueError as exc:
             logger.warning("Failed to update bound task {}: {}", task_id, exc)
+
+    async def _store_bound_task_result(
+        self,
+        session_key: str | None,
+        task_id: str | None,
+        result: str | None,
+    ) -> None:
+        if not session_key or not task_id:
+            return
+        try:
+            await self.task_store.set_task_result(session_key, task_id, result)
+        except KeyError:
+            logger.warning(
+                "Bound task {} not found for session {}; skipping stored result",
+                task_id,
+                session_key,
+            )
+
+    @staticmethod
+    def _build_bound_task_prompt(task) -> str:
+        """Build the subagent prompt content from a bound task record."""
+        subject = task.subject.strip()
+        description = task.description.strip()
+        if subject and description:
+            return f"{subject}\n\n{description}"
+        return subject or description
 
     @staticmethod
     def _format_partial_progress(result) -> str:

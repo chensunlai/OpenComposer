@@ -32,6 +32,8 @@ class TaskRecord:
     blocks: list[str] = field(default_factory=list)
     blocked_by: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    result: str | None = None
+    result_updated_at: str | None = None
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
@@ -50,6 +52,12 @@ class TaskRecord:
             blocks=[str(item) for item in data.get("blocks") or []],
             blocked_by=[str(item) for item in data.get("blocked_by") or []],
             metadata=dict(data.get("metadata") or {}),
+            result=str(data.get("result")) if data.get("result") is not None else None,
+            result_updated_at=(
+                str(data.get("result_updated_at"))
+                if data.get("result_updated_at") is not None
+                else None
+            ),
             created_at=str(data.get("created_at") or datetime.now().isoformat()),
             updated_at=str(data.get("updated_at") or datetime.now().isoformat()),
         )
@@ -210,6 +218,19 @@ class TaskStore:
             except OSError:
                 pass
             return removed
+
+    async def set_task_result(self, session_key: str, task_id: str, result: str | None) -> TaskRecord:
+        async with self._lock_for(session_key):
+            tasks = self._load_tasks(session_key)
+            task = tasks.get(str(task_id))
+            if task is None:
+                raise KeyError(f"Task {task_id} not found")
+
+            task.result = result
+            task.result_updated_at = datetime.now().isoformat() if result is not None else None
+            task.updated_at = datetime.now().isoformat()
+            self._persist_tasks(session_key, tasks)
+            return TaskRecord.from_dict(task.to_dict())
 
     async def transition_tasks(
         self,

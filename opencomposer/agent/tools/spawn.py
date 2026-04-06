@@ -12,10 +12,12 @@ if TYPE_CHECKING:
 
 @tool_parameters(
     tool_parameters_schema(
-        task=StringSchema("The task for the subagent to complete"),
+        task=StringSchema(
+            "The task for the subagent to complete. Required when task_id is not provided.",
+            nullable=True,
+        ),
         label=StringSchema("Optional short label for the task (for display)"),
         task_id=StringSchema("Optional task ID to bind to this subagent run", nullable=True),
-        required=["task"],
     )
 )
 class SpawnTool(Tool):
@@ -55,16 +57,16 @@ class SpawnTool(Tool):
         return (
             "Spawn a subagent to handle a task in the background. "
             "Use this for complex or time-consuming tasks that can run independently. "
-            "The subagent will complete the task and report back when done. "
+            "Without task_id, provide task text and the subagent auto-replies when done; with task_id, the subagent uses that task's subject and description as its assignment, and you should use task tools to wait for completion and read stored results instead. "
             "If task_id is provided, the bound task will automatically track "
-            "subagent progress and final status. "
+            "subagent progress, final status, and stored result. "
             "For deliverables or existing projects, inspect the workspace first "
             "and use a dedicated subdirectory when helpful."
         )
 
     async def execute(
         self,
-        task: str,
+        task: str | None = None,
         label: str | None = None,
         task_id: str | None = None,
         **kwargs: Any,

@@ -63,11 +63,12 @@ Keep work with the main agent when it is tiny, tightly coupled, or needed right 
 
 When delegating:
 1. Create or identify the task first.
-2. Call `spawn(..., task_id="<id>")`.
+2. Call `spawn(..., task_id="<id>")`; when `task_id` is bound, the subagent uses that task's subject and description as its assignment, so do not duplicate the task text.
 3. Give the subagent a concrete assignment and expected deliverable.
 4. If your next step truly depends on that result, use `task_wait(task_id=..., timeout_seconds=...)` with a bounded timeout.
+5. Read the stored output with `task_get_result(task_id=...)` when you need the subagent's final result.
 
-Bound subagent tasks may move automatically through `in_progress`, `completed`, `failed`, or `cancelled`.
+Bound subagent tasks may move automatically through `in_progress`, `completed`, `failed`, or `cancelled`, and their final output is stored on the task instead of being auto-pushed back as a message. If you do not bind `task_id`, the subagent follows the older auto-reply behavior.
 
 ## Cleanup And Interruptions
 
