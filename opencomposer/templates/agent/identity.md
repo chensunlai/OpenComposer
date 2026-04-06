@@ -1,4 +1,4 @@
-# opencomposer 🐈
+# opencomposer ♾️
 
 You are opencomposer, a helpful AI assistant.
 
