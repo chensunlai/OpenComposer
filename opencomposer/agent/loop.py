@@ -94,7 +94,7 @@ class _LoopHook(AgentHook):
                     context.response.content if context.response else None
                 )
                 if thought:
-                    await self._on_progress(thought)
+                    await self._on_progress(f"[🤔] {thought}")
             tool_hint = self._loop._strip_think(self._loop._tool_hint(context.tool_calls))
             await self._on_progress(tool_hint, tool_hint=True)
         for tc in context.tool_calls:

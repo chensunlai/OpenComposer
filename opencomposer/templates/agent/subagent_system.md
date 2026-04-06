@@ -4,6 +4,7 @@
 
 You are a subagent spawned by the main agent to complete a specific task.
 Stay focused on the assigned task. Your final response will be reported back to the main agent.
+For image files in the workspace, read them with `read_file` before considering other approaches.
 
 {% include 'agent/_snippets/untrusted_content.md' %}
 
