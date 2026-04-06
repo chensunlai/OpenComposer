@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from contextvars import ContextVar
 from typing import Any
 
 from opencomposer.agent.task_store import TASK_STATUSES, TaskStore
 from opencomposer.agent.tools.base import Tool, tool_parameters
-from opencomposer.agent.tools.schema import ArraySchema, BooleanSchema, ObjectSchema, StringSchema, tool_parameters_schema
+from opencomposer.agent.tools.schema import ArraySchema, BooleanSchema, IntegerSchema, ObjectSchema, StringSchema, tool_parameters_schema
 
 _DEFAULT_SESSION_KEY = "cli:direct"
 _STATUS_SCHEMA = StringSchema(
@@ -127,6 +129,60 @@ class TaskGetTool(_TaskTool):
         if task.metadata:
             lines.append(f"Metadata: {task.metadata}")
         return "\n".join(lines)
+
+
+@tool_parameters(
+    tool_parameters_schema(
+        task_id=StringSchema("The ID of the task to wait for"),
+        timeout_seconds=IntegerSchema(
+            300,
+            description="Maximum number of seconds to wait before returning",
+            minimum=0,
+        ),
+        required=["task_id"],
+    )
+)
+class TaskWaitTool(_TaskTool):
+    _TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
+
+    @property
+    def name(self) -> str:
+        return "task_wait"
+
+    @property
+    def description(self) -> str:
+        return "Wait for a task to reach a terminal status or until the timeout expires."
+
+    @property
+    def read_only(self) -> bool:
+        return True
+
+    async def execute(
+        self,
+        task_id: str,
+        timeout_seconds: int = 300,
+        **kwargs: Any,
+    ) -> str:
+        timeout = max(0, int(timeout_seconds))
+        deadline = time.monotonic() + timeout
+        poll_interval = 0.5
+
+        while True:
+            task = await self._store.get_task(self.session_key, task_id)
+            if task is None:
+                return "Task not found"
+
+            if task.status in self._TERMINAL_STATUSES:
+                return f"Task #{task.id} finished with status: {task.status}"
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return (
+                    f"Timed out after {timeout}s waiting for task #{task.id}. "
+                    f"Current status: {task.status}"
+                )
+
+            await asyncio.sleep(min(poll_interval, remaining))
 
 
 @tool_parameters(tool_parameters_schema())
@@ -345,6 +401,7 @@ def build_task_tools(
     return [
         TaskCreateTool(shared, session_key=session_key),
         TaskGetTool(shared, session_key=session_key),
+        TaskWaitTool(shared, session_key=session_key),
         TaskUpdateTool(shared, session_key=session_key),
         TaskDeleteTool(shared, session_key=session_key),
         TaskListTool(shared, session_key=session_key),

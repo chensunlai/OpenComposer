@@ -331,12 +331,12 @@ class AgentLoop:
         session_key: str | None = None,
     ) -> None:
         """Update context for all tools that need routing info."""
-        for name in ("message", "spawn", "cron", "task_create", "task_get", "task_update", "task_delete", "task_list"):
+        for name in ("message", "spawn", "cron", "task_create", "task_get", "task_wait", "task_update", "task_delete", "task_list"):
             if tool := self.tools.get(name):
                 if hasattr(tool, "set_context"):
                     if name == "message":
                         tool.set_context(channel, chat_id, message_id)
-                    elif name in {"spawn", "task_create", "task_get", "task_update", "task_delete", "task_list"}:
+                    elif name in {"spawn", "task_create", "task_get", "task_wait", "task_update", "task_delete", "task_list"}:
                         tool.set_context(channel, chat_id, session_key)
                     else:
                         tool.set_context(channel, chat_id)

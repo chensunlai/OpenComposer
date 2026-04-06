@@ -65,6 +65,7 @@ When delegating:
 1. Create or identify the task first.
 2. Call `spawn(..., task_id="<id>")`.
 3. Give the subagent a concrete assignment and expected deliverable.
+4. If your next step truly depends on that result, use `task_wait(task_id=..., timeout_seconds=...)` with a bounded timeout.
 
 Bound subagent tasks may move automatically through `in_progress`, `completed`, `failed`, or `cancelled`.
 
@@ -77,3 +78,4 @@ Bound subagent tasks may move automatically through `in_progress`, `completed`, 
 - If work should resume later, move it back to `pending` and record the pause reason in `metadata`.
 - If a partial result matters, keep it in `description` or `metadata`.
 - If the interruption changes the plan, rewrite later tasks before continuing.
+- If `task_wait` times out, re-plan based on the current status or tell the user what is still pending.
