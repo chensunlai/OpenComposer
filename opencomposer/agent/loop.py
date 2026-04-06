@@ -18,6 +18,7 @@ from opencomposer.agent.hook import AgentHook, AgentHookContext, CompositeHook
 from opencomposer.agent.memory import Consolidator, Dream
 from opencomposer.agent.runner import AgentRunSpec, AgentRunner
 from opencomposer.agent.subagent import SubagentManager
+from opencomposer.agent.task_store import TaskStore
 from opencomposer.agent.tools.cron import CronTool
 from opencomposer.agent.skills import BUILTIN_SKILLS_DIR
 from opencomposer.agent.tools.filesystem import EditFileTool, ListDirTool, ReadFileTool, WriteFileTool
@@ -26,10 +27,12 @@ from opencomposer.agent.tools.registry import ToolRegistry
 from opencomposer.agent.tools.search import GlobTool, GrepTool
 from opencomposer.agent.tools.shell import ExecTool
 from opencomposer.agent.tools.spawn import SpawnTool
+from opencomposer.agent.tools.tasks import build_task_tools
 from opencomposer.agent.tools.web import WebFetchTool, WebSearchTool
 from opencomposer.bus.events import InboundMessage, OutboundMessage
 from opencomposer.command import CommandContext, CommandRouter, register_builtin_commands
 from opencomposer.bus.queue import MessageBus
+from opencomposer.config.paths import get_workspace_tasks_dir
 from opencomposer.config.schema import AgentDefaults
 from opencomposer.providers.base import LLMProvider
 from opencomposer.session.manager import Session, SessionManager
@@ -54,6 +57,7 @@ class _LoopHook(AgentHook):
         channel: str = "cli",
         chat_id: str = "direct",
         message_id: str | None = None,
+        session_key: str | None = None,
     ) -> None:
         self._loop = agent_loop
         self._on_progress = on_progress
@@ -62,6 +66,7 @@ class _LoopHook(AgentHook):
         self._channel = channel
         self._chat_id = chat_id
         self._message_id = message_id
+        self._session_key = session_key or f"{channel}:{chat_id}"
         self._stream_buf = ""
 
     def wants_streaming(self) -> bool:
@@ -95,7 +100,12 @@ class _LoopHook(AgentHook):
         for tc in context.tool_calls:
             args_str = json.dumps(tc.arguments, ensure_ascii=False)
             logger.info("Tool call: {}({})", tc.name, args_str[:200])
-        self._loop._set_tool_context(self._channel, self._chat_id, self._message_id)
+        self._loop._set_tool_context(
+            self._channel,
+            self._chat_id,
+            self._message_id,
+            session_key=self._session_key,
+        )
 
     async def after_iteration(self, context: AgentHookContext) -> None:
         u = context.usage or {}
@@ -217,6 +227,7 @@ class AgentLoop:
         self.sessions = session_manager or SessionManager(workspace)
         self.tools = ToolRegistry()
         self.runner = AgentRunner(provider)
+        self.task_store = TaskStore(root_dir=get_workspace_tasks_dir(workspace))
         self.subagents = SubagentManager(
             provider=provider,
             workspace=workspace,
@@ -226,6 +237,7 @@ class AgentLoop:
             max_tool_result_chars=self.max_tool_result_chars,
             exec_config=self.exec_config,
             restrict_to_workspace=restrict_to_workspace,
+            task_store=self.task_store,
         )
 
         self._running = False
@@ -279,6 +291,8 @@ class AgentLoop:
         if self.web_config.enable:
             self.tools.register(WebSearchTool(config=self.web_config.search, proxy=self.web_config.proxy))
             self.tools.register(WebFetchTool(proxy=self.web_config.proxy))
+        for tool in build_task_tools(store=self.task_store):
+            self.tools.register(tool)
         self.tools.register(MessageTool(send_callback=self.bus.publish_outbound))
         self.tools.register(SpawnTool(manager=self.subagents))
         if self.cron_service:
@@ -308,12 +322,24 @@ class AgentLoop:
         finally:
             self._mcp_connecting = False
 
-    def _set_tool_context(self, channel: str, chat_id: str, message_id: str | None = None) -> None:
+    def _set_tool_context(
+        self,
+        channel: str,
+        chat_id: str,
+        message_id: str | None = None,
+        *,
+        session_key: str | None = None,
+    ) -> None:
         """Update context for all tools that need routing info."""
-        for name in ("message", "spawn", "cron"):
+        for name in ("message", "spawn", "cron", "task_create", "task_get", "task_wait", "task_get_result", "task_update", "task_delete", "task_list"):
             if tool := self.tools.get(name):
                 if hasattr(tool, "set_context"):
-                    tool.set_context(channel, chat_id, *([message_id] if name == "message" else []))
+                    if name == "message":
+                        tool.set_context(channel, chat_id, message_id)
+                    elif name in {"spawn", "task_create", "task_get", "task_wait", "task_get_result", "task_update", "task_delete", "task_list"}:
+                        tool.set_context(channel, chat_id, session_key)
+                    else:
+                        tool.set_context(channel, chat_id)
 
     @staticmethod
     def _strip_think(text: str | None) -> str | None:
@@ -345,6 +371,7 @@ class AgentLoop:
         channel: str = "cli",
         chat_id: str = "direct",
         message_id: str | None = None,
+        session_key: str | None = None,
     ) -> tuple[str | None, list[str], list[dict]]:
         """Run the agent iteration loop.
 
@@ -361,6 +388,7 @@ class AgentLoop:
             channel=channel,
             chat_id=chat_id,
             message_id=message_id,
+            session_key=session_key or (session.key if session else None),
         )
         hook: AgentHook = (
             _LoopHookChain(loop_hook, self._extra_hooks)
@@ -524,12 +552,17 @@ class AgentLoop:
             channel, chat_id = (msg.chat_id.split(":", 1) if ":" in msg.chat_id
                                 else ("cli", msg.chat_id))
             logger.info("Processing system message from {}", msg.sender_id)
-            key = f"{channel}:{chat_id}"
+            key = session_key or msg.session_key
             session = self.sessions.get_or_create(key)
             if self._restore_runtime_checkpoint(session):
                 self.sessions.save(session)
             await self.consolidator.maybe_consolidate_by_tokens(session)
-            self._set_tool_context(channel, chat_id, msg.metadata.get("message_id"))
+            self._set_tool_context(
+                channel,
+                chat_id,
+                msg.metadata.get("message_id"),
+                session_key=key,
+            )
             history = session.get_history(max_messages=0)
             current_role = "assistant" if msg.sender_id == "subagent" else "user"
             messages = self.context.build_messages(
@@ -540,6 +573,7 @@ class AgentLoop:
             final_content, _, all_msgs = await self._run_agent_loop(
                 messages, session=session, channel=channel, chat_id=chat_id,
                 message_id=msg.metadata.get("message_id"),
+                session_key=key,
             )
             self._save_turn(session, all_msgs, 1 + len(history))
             self._clear_runtime_checkpoint(session)
@@ -564,7 +598,12 @@ class AgentLoop:
 
         await self.consolidator.maybe_consolidate_by_tokens(session)
 
-        self._set_tool_context(msg.channel, msg.chat_id, msg.metadata.get("message_id"))
+        self._set_tool_context(
+            msg.channel,
+            msg.chat_id,
+            msg.metadata.get("message_id"),
+            session_key=key,
+        )
         if message_tool := self.tools.get("message"):
             if isinstance(message_tool, MessageTool):
                 message_tool.start_turn()
@@ -593,6 +632,7 @@ class AgentLoop:
             session=session,
             channel=msg.channel, chat_id=msg.chat_id,
             message_id=msg.metadata.get("message_id"),
+            session_key=key,
         )
 
         if final_content is None or not final_content.strip():

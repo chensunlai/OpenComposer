@@ -1,5 +1,6 @@
 """Spawn tool for creating background subagents."""
 
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
 from opencomposer.agent.tools.base import Tool, tool_parameters
@@ -11,9 +12,12 @@ if TYPE_CHECKING:
 
 @tool_parameters(
     tool_parameters_schema(
-        task=StringSchema("The task for the subagent to complete"),
+        task=StringSchema(
+            "The task for the subagent to complete. Required when task_id is not provided.",
+            nullable=True,
+        ),
         label=StringSchema("Optional short label for the task (for display)"),
-        required=["task"],
+        task_id=StringSchema("Optional task ID to bind to this subagent run", nullable=True),
     )
 )
 class SpawnTool(Tool):
@@ -24,12 +28,25 @@ class SpawnTool(Tool):
         self._origin_channel = "cli"
         self._origin_chat_id = "direct"
         self._session_key = "cli:direct"
+        key = f"{self.__class__.__name__}:{id(self)}"
+        self._origin_channel_ctx: ContextVar[str] = ContextVar(
+            f"{key}:origin_channel",
+            default=self._origin_channel,
+        )
+        self._origin_chat_ctx: ContextVar[str] = ContextVar(
+            f"{key}:origin_chat",
+            default=self._origin_chat_id,
+        )
+        self._session_key_ctx: ContextVar[str] = ContextVar(
+            f"{key}:session_key",
+            default=self._session_key,
+        )
 
-    def set_context(self, channel: str, chat_id: str) -> None:
+    def set_context(self, channel: str, chat_id: str, session_key: str | None = None) -> None:
         """Set the origin context for subagent announcements."""
-        self._origin_channel = channel
-        self._origin_chat_id = chat_id
-        self._session_key = f"{channel}:{chat_id}"
+        self._origin_channel_ctx.set(channel)
+        self._origin_chat_ctx.set(chat_id)
+        self._session_key_ctx.set(session_key or f"{channel}:{chat_id}")
 
     @property
     def name(self) -> str:
@@ -40,17 +57,26 @@ class SpawnTool(Tool):
         return (
             "Spawn a subagent to handle a task in the background. "
             "Use this for complex or time-consuming tasks that can run independently. "
-            "The subagent will complete the task and report back when done. "
+            "Without task_id, provide task text and the subagent auto-replies when done; with task_id, the subagent uses that task's subject and description as its assignment, and you should use task tools to wait for completion and read stored results instead. "
+            "If task_id is provided, the bound task will automatically track "
+            "subagent progress, final status, and stored result. "
             "For deliverables or existing projects, inspect the workspace first "
             "and use a dedicated subdirectory when helpful."
         )
 
-    async def execute(self, task: str, label: str | None = None, **kwargs: Any) -> str:
+    async def execute(
+        self,
+        task: str | None = None,
+        label: str | None = None,
+        task_id: str | None = None,
+        **kwargs: Any,
+    ) -> str:
         """Spawn a subagent to execute the given task."""
         return await self._manager.spawn(
             task=task,
             label=label,
-            origin_channel=self._origin_channel,
-            origin_chat_id=self._origin_chat_id,
-            session_key=self._session_key,
+            task_id=task_id,
+            origin_channel=self._origin_channel_ctx.get(),
+            origin_chat_id=self._origin_chat_ctx.get(),
+            session_key=self._session_key_ctx.get(),
         )
