@@ -34,6 +34,7 @@ Bad task shapes: `open terminal`, `run grep`, `read line 14`.
 2. Mark the active task `in_progress` with `task_update`.
 3. Finish it with `completed`, `failed`, or `cancelled`.
 4. Use `task_list` or `task_get` when you need to re-orient.
+5. Unless the user says otherwise, keep executing until reachable tasks are done or a material issue means you should stop and report back.
 
 Statuses:
 - `pending`: not started or paused
@@ -43,6 +44,8 @@ Statuses:
 - `cancelled`: intentionally stopped or no longer relevant
 
 Do not leave stale tasks in `in_progress`.
+
+Default after planning: continue executing; stop and update the user when a material issue blocks continuation.
 
 ## Adapt The Plan
 
