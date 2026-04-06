@@ -168,19 +168,34 @@ class TaskStore:
             return TaskRecord.from_dict(task.to_dict())
 
     async def delete_task(self, session_key: str, task_id: str) -> bool:
+        deleted = await self.delete_task_ids(session_key, [task_id])
+        return bool(deleted)
+
+    async def delete_task_ids(self, session_key: str, task_ids: list[str] | set[str]) -> list[str]:
         async with self._lock_for(session_key):
             tasks = self._load_tasks(session_key)
-            removed = tasks.pop(str(task_id), None)
-            if removed is None:
-                return False
+            deleted = self._delete_task_ids_locked(tasks, {str(task_id) for task_id in task_ids})
+            if deleted:
+                self._persist_tasks(session_key, tasks)
+            return deleted
 
-            for other in tasks.values():
-                other.blocks = [item for item in other.blocks if item != removed.id]
-                other.blocked_by = [item for item in other.blocked_by if item != removed.id]
-                other.updated_at = datetime.now().isoformat()
+    async def delete_tasks_before(self, session_key: str, task_id: str) -> list[str]:
+        async with self._lock_for(session_key):
+            tasks = self._load_tasks(session_key)
+            target = tasks.get(str(task_id))
+            if target is None:
+                raise KeyError(f"Task {task_id} not found")
 
-            self._persist_tasks(session_key, tasks)
-            return True
+            target_key = self._task_sort_key(target.id)
+            delete_ids = {
+                candidate.id
+                for candidate in self._sorted_tasks(tasks)
+                if self._task_sort_key(candidate.id) < target_key
+            }
+            deleted = self._delete_task_ids_locked(tasks, delete_ids)
+            if deleted:
+                self._persist_tasks(session_key, tasks)
+            return deleted
 
     async def clear_session(self, session_key: str) -> int:
         async with self._lock_for(session_key):
@@ -330,10 +345,37 @@ class TaskStore:
 
     @staticmethod
     def _sorted_tasks(tasks: dict[str, TaskRecord]) -> list[TaskRecord]:
-        def _key(task: TaskRecord) -> tuple[int, str]:
-            return (int(task.id), task.id) if task.id.isdigit() else (10**9, task.id)
+        return sorted(tasks.values(), key=lambda task: TaskStore._task_sort_key(task.id))
 
-        return sorted(tasks.values(), key=_key)
+    @staticmethod
+    def _task_sort_key(task_id: str) -> tuple[int, str]:
+        return (int(task_id), task_id) if task_id.isdigit() else (10**9, task_id)
+
+    @staticmethod
+    def _delete_task_ids_locked(tasks: dict[str, TaskRecord], delete_ids: set[str]) -> list[str]:
+        if not delete_ids:
+            return []
+
+        removed_ids: list[str] = []
+        for task_id in sorted(delete_ids, key=TaskStore._task_sort_key):
+            removed = tasks.pop(task_id, None)
+            if removed is not None:
+                removed_ids.append(removed.id)
+
+        if not removed_ids:
+            return []
+
+        removed_set = set(removed_ids)
+        now = datetime.now().isoformat()
+        for other in tasks.values():
+            next_blocks = [item for item in other.blocks if item not in removed_set]
+            next_blocked_by = [item for item in other.blocked_by if item not in removed_set]
+            if next_blocks != other.blocks or next_blocked_by != other.blocked_by:
+                other.blocks = next_blocks
+                other.blocked_by = next_blocked_by
+                other.updated_at = now
+
+        return removed_ids
 
     def _validate_dependencies(
         self,

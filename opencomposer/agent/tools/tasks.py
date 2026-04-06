@@ -7,7 +7,7 @@ from typing import Any
 
 from opencomposer.agent.task_store import TASK_STATUSES, TaskStore
 from opencomposer.agent.tools.base import Tool, tool_parameters
-from opencomposer.agent.tools.schema import ArraySchema, ObjectSchema, StringSchema, tool_parameters_schema
+from opencomposer.agent.tools.schema import ArraySchema, BooleanSchema, ObjectSchema, StringSchema, tool_parameters_schema
 
 _DEFAULT_SESSION_KEY = "cli:direct"
 _STATUS_SCHEMA = StringSchema(
@@ -251,8 +251,20 @@ class TaskUpdateTool(_TaskTool):
 
 @tool_parameters(
     tool_parameters_schema(
-        task_id=StringSchema("The ID of the task to delete"),
-        required=["task_id"],
+        task_id=StringSchema("The ID of the task to delete", nullable=True),
+        task_ids=ArraySchema(
+            StringSchema("A task ID to delete"),
+            description="Delete multiple tasks by ID in one call",
+            nullable=True,
+        ),
+        before_task_id=StringSchema(
+            "Delete all tasks with IDs ordered before this task ID (does not delete the target task)",
+            nullable=True,
+        ),
+        clear_all=BooleanSchema(
+            description="Delete every task in the current session task list",
+            default=False,
+        ),
     )
 )
 class TaskDeleteTool(_TaskTool):
@@ -262,13 +274,63 @@ class TaskDeleteTool(_TaskTool):
 
     @property
     def description(self) -> str:
-        return "Delete a task from the current session task list."
+        return "Delete tasks from the current session task list: a single task, multiple tasks, all tasks before an ID, or the entire list."
 
-    async def execute(self, task_id: str, **kwargs: Any) -> str:
-        deleted = await self._store.delete_task(self.session_key, task_id)
+    async def execute(
+        self,
+        task_id: str | None = None,
+        task_ids: list[str] | None = None,
+        before_task_id: str | None = None,
+        clear_all: bool = False,
+        **kwargs: Any,
+    ) -> str:
+        normalized_task_id = task_id.strip() if isinstance(task_id, str) else ""
+        normalized_ids = [item.strip() for item in (task_ids or []) if isinstance(item, str) and item.strip()]
+        normalized_before_id = before_task_id.strip() if isinstance(before_task_id, str) else ""
+
+        modes_selected = sum(
+            [
+                1 if (normalized_task_id or normalized_ids) else 0,
+                1 if normalized_before_id else 0,
+                1 if clear_all else 0,
+            ]
+        )
+        if modes_selected != 1:
+            return (
+                "Error: Choose exactly one delete mode: task_id/task_ids, before_task_id, or clear_all=true"
+            )
+
+        if clear_all:
+            removed = await self._store.clear_session(self.session_key)
+            return f"Deleted {removed} task(s) from the current session"
+
+        if normalized_before_id:
+            try:
+                deleted = await self._store.delete_tasks_before(self.session_key, normalized_before_id)
+            except KeyError as exc:
+                return f"Error: {exc}"
+            if not deleted:
+                return f"No tasks exist before task #{normalized_before_id}"
+            return (
+                f"Deleted {len(deleted)} task(s) before task #{normalized_before_id}: "
+                + ", ".join(f"#{task}" for task in deleted)
+            )
+
+        delete_ids: list[str] = []
+        if normalized_task_id:
+            delete_ids.append(normalized_task_id)
+        delete_ids.extend(normalized_ids)
+        ordered_delete_ids = list(dict.fromkeys(delete_ids))
+        deleted = await self._store.delete_task_ids(self.session_key, ordered_delete_ids)
         if not deleted:
             return "Task not found"
-        return f"Task #{task_id} deleted successfully"
+        if len(ordered_delete_ids) == 1 and len(deleted) == 1:
+            return f"Task #{deleted[0]} deleted successfully"
+        missing = [task for task in ordered_delete_ids if task not in set(deleted)]
+        message = f"Deleted {len(deleted)} task(s): " + ", ".join(f"#{task}" for task in deleted)
+        if missing:
+            message += " | Not found: " + ", ".join(f"#{task}" for task in missing)
+        return message
 
 
 def build_task_tools(
