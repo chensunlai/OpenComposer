@@ -5,6 +5,7 @@ from contextlib import AsyncExitStack
 from typing import Any
 
 import httpx
+from mcp import types
 from loguru import logger
 
 from opencomposer.agent.tools.base import Tool
@@ -98,9 +99,39 @@ class MCPToolWrapper(Tool):
     def parameters(self) -> dict[str, Any]:
         return self._parameters
 
-    async def execute(self, **kwargs: Any) -> str:
-        from mcp import types
+    def _convert_content_block(
+        self,
+        block: Any,
+    ) -> list[dict[str, Any]]:
+        if isinstance(block, types.TextContent) and isinstance(getattr(block, "text", None), str):
+            return [{"type": "text", "text": block.text}]
 
+        if isinstance(block, types.ImageContent):
+            mime = getattr(block, "mimeType", None)
+            encoded = getattr(block, "data", None)
+            if isinstance(mime, str) and mime.startswith("image/") and encoded:
+                return [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime};base64,{encoded}"},
+                        "_meta": {"path": f"mcp:{self.name}"},
+                    },
+                    {"type": "text", "text": f"(Image returned by MCP tool: {self.name})"},
+                ]
+
+        return [{"type": "text", "text": str(block)}]
+
+    def _convert_result_content(self, content: list[Any]) -> list[dict[str, Any]]:
+        content_blocks: list[dict[str, Any]] = []
+
+        for block in content:
+            content_blocks.extend(self._convert_content_block(block))
+
+        if not content_blocks:
+            content_blocks.append({"type": "text", "text": "(no output)"})
+        return content_blocks
+
+    async def execute(self, **kwargs: Any) -> Any:
         try:
             result = await asyncio.wait_for(
                 self._session.call_tool(self._original_name, arguments=kwargs),
@@ -126,13 +157,7 @@ class MCPToolWrapper(Tool):
             )
             return f"(MCP tool call failed: {type(exc).__name__})"
 
-        parts = []
-        for block in result.content:
-            if isinstance(block, types.TextContent):
-                parts.append(block.text)
-            else:
-                parts.append(str(block))
-        return "\n".join(parts) or "(no output)"
+        return self._convert_result_content(result.content)
 
 
 async def connect_mcp_servers(
